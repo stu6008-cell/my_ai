@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+mini_ai/data/memory.json
+mini_ai/data/memory.json.tmp
+.venv/
