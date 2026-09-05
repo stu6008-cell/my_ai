@@ -5,6 +5,10 @@ from collections import Counter
 
 from .tokenizer import features
 
+# 커버리지 벌점의 세기. 라벨링한 문장으로 0 / 0.25 / 0.5 를 비교해서 고른 값이다.
+# 0 이면 "주식 전망 알려줘"가 파이썬 설명에 붙고, 0.5 면 정상적인 의역까지 떨어진다.
+COVERAGE_EXPONENT = 0.25
+
 
 class TfidfIndex:
     """문서 목록을 받아 질의와 가장 비슷한 문서를 찾아준다."""
@@ -85,7 +89,7 @@ class TfidfIndex:
             covered = sum(
                 query_vector[term] ** 2 for term in query_vector if term in vector
             )
-            score = cosine * math.sqrt(covered)
+            score = cosine * (covered ** COVERAGE_EXPONENT)
             scored.append((score, self.documents[index], self.payloads[index]))
 
         scored.sort(key=lambda row: row[0], reverse=True)

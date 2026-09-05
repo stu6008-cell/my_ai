@@ -86,7 +86,9 @@ _WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 def clock(text, bot):
     query = normalize(text)
     now = datetime.datetime.now()
-    if re.search(r"(몇\s*시|시간\s*(알려|뭐|몇))", query):
+    # "출근 몇시에 해" 같은 질문까지 현재 시각으로 답하지 않도록,
+    # 지금 시각을 묻는 문장 전체와 일치할 때만 반응한다.
+    if re.match(r"^(지금|현재)?\s*(몇\s*시|시간)\s*(야|지|인가요?|예요|입니까|알려줘|알려|됐어)?\s*[?？]?$", query):
         return now.strftime("지금 %H시 %M분이야.")
     # 그냥 "오늘"만 보고 반응하면 "오늘 뭐 먹지"까지 날짜로 답해버린다.
     if re.search(r"(며칠|몇\s*일|무슨\s*요일|요일이야|날짜)", query):
@@ -115,6 +117,17 @@ def _clean_name(raw):
 
 def memory(text, bot):
     query = normalize(text)
+
+    if not getattr(bot, "learn_from_chat", True):
+        # 읽기 전용 모드: 파일에 적힌 사실은 답해주되, 대화로 새로 받지는 않는다.
+        match = re.search(r"내\s*([가-힣a-zA-Z ]{1,15}?)\s*(?:이|가)?\s*뭐(?:야|였지|지)", query)
+        if match:
+            value = bot.recall(match.group(1).strip())
+            if value:
+                return "네 {}은(는) {}(이)야.".format(match.group(1).strip(), value)
+        if any(pattern.search(query) for pattern in _NAME_PATTERNS):
+            return "대화로는 정보를 안 받게 돼 있어. 원본 파일에 적어주면 외울게."
+        return None
 
     for pattern in _NAME_PATTERNS:
         match = pattern.search(query)
