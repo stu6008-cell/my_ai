@@ -9,7 +9,17 @@ import math
 import random
 from collections import Counter, defaultdict
 
+from .tokenizer import features
+
 SEPARATOR = "\x1f"
+
+# ingest._question_forms 가 사실 하나를 질문 네 개로 부풀릴 때 갖다 붙이는
+# 의문사 껍데기들. 이건 내가 만든 문법이지 사용자가 준 정보가 아니므로,
+# 분류기가 근거로 삼으면 안 된다. "뭐야" 하나만 겹쳤다고 답을 내놓으면
+# 파일에 없는 질문까지 아무 답에나 붙어버린다.
+QUESTION_SCAFFOLD = frozenset(
+    features("뭐야") + features("알려줘") + features("에 대해 설명해줘")
+)
 
 
 class NaiveBayesClassifier:
@@ -42,17 +52,21 @@ class NaiveBayesClassifier:
     def classes(self):
         return list(self.class_counts)
 
-    def predict(self, tokens, min_known=2, min_margin=0.08):
+    def predict(self, tokens, min_margin=0.08):
         """(라벨, 확신도)를 돌려준다. 근거가 부족하면 None.
 
-        어휘에 없는 토큰은 아예 세지 않는다. 대신 아는 토큰이
-        min_known개 미만이면 판단을 포기한다 - 모르는 문장에
-        억지로 라벨을 붙이는 걸 막는 장치다.
+        어휘에 없는 토큰은 점수 계산에서 아예 빼고, 남은 것 중
+        의문사 껍데기가 아닌 토큰이 하나도 없으면 판단을 포기한다.
         """
-        if not self.class_counts:
+        if len(self.class_counts) < 2:
+            # 라벨이 하나뿐이면 정규화 확률이 무조건 1.0 이라 무엇을 물어도
+            # 그 답을 내놓는다. 비교할 대상이 없으면 분류기는 침묵해야 한다.
             return None
+
         known = [t for t in tokens if t in self.vocabulary]
-        if len(known) < min_known:
+        # "사는 곳이 뭐야" 처럼 내용어는 전부 처음 보고 "뭐야" 만 겹치는 경우를
+        # 걸러낸다. 껍데기를 뺀 실질 근거가 없으면 아는 척하지 않는다.
+        if not {t for t in known if t not in QUESTION_SCAFFOLD}:
             return None
 
         total_docs = sum(self.class_counts.values())

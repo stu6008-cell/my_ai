@@ -115,12 +115,28 @@ class LearnerTest(unittest.TestCase):
         self.assertEqual(label, "인사")
         self.assertGreater(probability, 0.5)
 
-    def test_abstains_without_enough_known_tokens(self):
+    def test_abstains_on_entirely_unknown_tokens(self):
         self.assertIsNone(self.classifier.predict(["양자", "역학"]))
-        self.assertIsNone(self.classifier.predict(["안녕"]))
+
+    def test_single_content_token_is_evidence(self):
+        # 내용어 하나면 충분하다. "출근" 만으로 출근 시간 답에 닿아야 한다.
+        self.assertIsNotNone(self.classifier.predict(["배고파"]))
+
+    def test_abstains_when_only_scaffolding_matches(self):
+        # 의문사 껍데기만 겹치는 건 근거가 아니다.
+        scaffolded = NaiveBayesClassifier()
+        scaffolded.train(features("좋아하는 음식이 뭐야"), "음식")
+        scaffolded.train(features("사는 곳이 뭐야"), "장소")
+        self.assertIsNone(scaffolded.predict(features("완전히 처음 보는 게 뭐야")))
 
     def test_untrained_classifier_abstains(self):
         self.assertIsNone(NaiveBayesClassifier().predict(["아무", "말"]))
+
+    def test_single_label_classifier_abstains(self):
+        # 라벨이 하나면 확률이 항상 1.0 이 되어 아무 질문에나 답해버린다.
+        lonely = NaiveBayesClassifier()
+        lonely.train(["안녕", "하이"], "인사")
+        self.assertIsNone(lonely.predict(["안녕", "하이"]))
 
     def test_ranker_reward_and_penalty(self):
         ranker = ResponseRanker(rng=random.Random(0))
@@ -288,6 +304,14 @@ class FileOnlyBrainTest(unittest.TestCase):
         self.bot.respond("응")
         self.assertEqual(len(self.bot.dataset["pairs"]), before)
         self.assertEqual(self.bot.memory["learned"], [])
+
+    def test_removed_fact_is_forgotten(self):
+        # 원본에서 지운 내용을 분류기가 되살려 답하면 안 된다.
+        with open(self.source, "w", encoding="utf-8") as handle:
+            handle.write("좋아하는 음식: 마라탕\n")
+        self.bot.reload_source()
+        self.assertNotEqual(self.bot.respond("사는 곳이 뭐야").text, "마라탕")
+        self.assertEqual(self.bot.respond("좋아하는 음식이 뭐야").text, "마라탕")
 
     def test_reload_picks_up_edits(self):
         self.assertEqual(self.bot.respond("취미가 뭐야").source, "fallback")
